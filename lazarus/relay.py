@@ -55,29 +55,12 @@ async def report_crash(report: CrashReport):
 def get_report():
     print("--- 🧪 SERVING DUMMY REPORT FOR TESTING ---")
     
-    # HARDCODED DUMMY DATA FOR DEMO
-    dummy_data = {
-        "app_name": "TEST_APP_DUMMY",
-        "crash_log": "redis.exceptions.ConnectionError: Error 111 connecting to localhost:6379. Connection refused.",
-        "context_files": {
-            "app.py": """
-import redis
-from flask import Flask
-# BUG: This should be 'redis'
-BUGGY_REDIS_HOST = 'localhost' 
-app = Flask(__name__)
-cache = redis.Redis(host=BUGGY_REDIS_HOST, port=6379)
-""",
-            "docker-compose.yml": """
-services:
-  web:
-    build: .
-  redis:
-    image: redis:alpine
-"""
-        }
-    }
-    return dummy_data
+    if not current_report:
+        # If no sensor has reported yet, return 404 or a "Waiting" status
+        return {"status": "WAITING_FOR_CRASH", "message": "No crash reported yet."}
+    
+    # Return the real data sent by the sensor
+    return current_report.dict()
 
 @app.post("/apply-fix")
 async def apply_fix(command: dict):

@@ -39,7 +39,10 @@ def manual_crash():
         
     try:
         # THE BUG: This will fail immediately
-        cache.incr('hits')
+        # cache.incr('hits')
+        arr = [1,2, 3 ]
+
+        x = arr[0]
         return "Success!" # We won't get here
     except Exception as e:
         print(f"--- 💥 RUNTIME ERROR TRIGGERED: {e} ---")
