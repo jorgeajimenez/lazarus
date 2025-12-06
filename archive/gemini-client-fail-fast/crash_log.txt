@@ -1,0 +1,2 @@
+--- APP STARTUP: CHECKING REDIS CONNECTION ---
+--- FATAL ERROR: CANNOT CONNECT TO REDIS: Error 111 connecting to localhost:6379. Connection refused. ---

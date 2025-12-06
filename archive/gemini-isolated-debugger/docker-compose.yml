@@ -1,0 +1,30 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  # The Buggy Application (web) - Uses app-service folder as context
+  web:
+    build: 
+      context: ./app-service
+      dockerfile: Dockerfile 
+    ports:
+      - "8000:5000"
+    volumes:
+      - ./app-service:/code # Map app folder to container code folder
+      - ./requirements.txt:/requirements.txt # Map root requirements
+    restart: "no" 
+    
+  # The Redis Database
+  redis:
+    image: "redis:alpine"
+    
+  # The Lazarus Relay (Independent Service) - Uses its own dedicated folder
+  lazarus-relay:
+    build: 
+      context: ./lazarus-relay-service
+      dockerfile: Dockerfile
+    # Expose the Relay API externally on port 8080 (less likely to conflict)
+    ports:
+      - "8080:8000" 
+    restart: always
+    

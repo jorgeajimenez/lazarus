@@ -1,0 +1,31 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  # The Buggy Application (web)
+  web:
+    build: 
+      context: .
+      dockerfile: Dockerfile # Uses the main Dockerfile
+    ports:
+      - "8000:5000"
+    volumes:
+      - .:/code # Allows the Healer to modify app.py
+    restart: "no" 
+    
+  # The Redis Database
+  redis:
+    image: "redis:alpine"
+    
+  # The Lazarus Relay (Independent Service)
+  lazarus-relay:
+    # --- IMPORTANT FIX: Uses the dedicated Dockerfile ---
+    build: 
+      context: .
+      dockerfile: Dockerfile.Relay
+    # --- END FIX ---
+    
+    ports:
+      - "8000:8000" # Expose the Relay API externally on port 8001
+    restart: always
+    

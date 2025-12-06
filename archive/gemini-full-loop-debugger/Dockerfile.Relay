@@ -1,0 +1,15 @@
+# Dockerfile.Relay (The Independent Third-Party Service)
+FROM python:3.10-alpine
+
+WORKDIR /app
+
+# Only install FastAPI and Uvicorn dependencies
+COPY requirements.txt .
+RUN pip install fastapi uvicorn --no-cache-dir
+
+COPY relay.py .
+
+EXPOSE 8000
+
+# Command to run the FastAPI app
+CMD ["uvicorn", "relay:app", "--host", "0.0.0.0", "--port", "8000"]

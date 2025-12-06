@@ -1,0 +1,217 @@
+#!/bin/bash
+
+# --- 1. Setup Environment ---
+PROJECT_DIR="gemini-vibe-debugger-sf"
+echo "Creating project directory: $PROJECT_DIR"
+mkdir -p "$PROJECT_DIR"
+cd "$PROJECT_DIR"
+
+echo "Creating requirements.txt..."
+cat <<EOF > requirements.txt
+# requirements.txt
+flask
+redis
+google-genai
+EOF
+
+# --- 2. Create The Intentionally Buggy App Code ---
+echo "Creating app.py (The broken web app)..."
+cat <<EOF > app.py
+# app.py
+import time
+import redis
+from flask import Flask
+
+# THE BUG: The hostname is intentionally set incorrectly here.
+# It should be 'redis' (the service name in docker-compose)
+# but is set to 'localhost' to force a connection error inside the container.
+BUGGY_REDIS_HOST = 'localhost' 
+
+app = Flask(__name__)
+# The application attempts to connect to the misconfigured host
+cache = redis.Redis(host=BUGGY_REDIS_HOST, port=6379, decode_responses=True)
+
+def get_hit_count():
+    retries = 5
+    while retries > 0:
+        try:
+            # This line will throw a redis.exceptions.ConnectionError
+            return cache.incr('hits')
+        except redis.exceptions.ConnectionError as exc:
+            retries -= 1
+            time.sleep(0.5)
+            if retries == 0:
+                # This will eventually crash the container and fill the logs
+                raise exc
+
+@app.route('/')
+def hello():
+    try:
+        count = get_hit_count()
+        return f'Hello World! I have been seen {count} times.\n'
+    except Exception as e:
+        # A simple error message on the web, but the full stack trace is in the logs
+        return f'Web service failed to connect to database: {e}', 500
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
+EOF
+
+# --- 3. Create Docker Configuration Files ---
+echo "Creating Dockerfile..."
+cat <<EOF > Dockerfile
+# Dockerfile
+FROM python:3.10-alpine
+
+WORKDIR /code
+
+# Install dependencies (Flask and Redis library)
+COPY requirements.txt requirements.txt
+RUN pip install -r requirements.txt --no-cache-dir
+
+COPY . .
+
+EXPOSE 5000
+
+# Run the app
+CMD ["python", "app.py"]
+EOF
+
+echo "Creating docker-compose.yml (The environment context)..."
+cat <<EOF > docker-compose.yml
+# docker-compose.yml
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "8000:5000"
+    volumes:
+      - .:/code
+    # This service is named 'web' and will try to connect to 'redis'
+
+  redis:
+    image: "redis:alpine"
+    # This service is named 'redis' (which should be the correct hostname)
+EOF
+
+# --- 4. Create The Triage Agent (The Hackathon Submission) ---
+echo "Creating triage_agent.py (The Gemini agent)..."
+cat <<EOF > triage_agent.py
+# triage_agent.py
+import os
+import sys
+from google import genai
+from google.genai.errors import APIError
+
+# --- 1. Load All Context Files ---
+def load_context_files():
+    """Reads all system context files into a single string for the prompt."""
+    files_to_read = [
+        'app.py',           # The application code
+        'docker-compose.yml', # The environment setup/network context
+        'crash_log.txt'     # The raw error log from the crashing container
+    ]
+    
+    full_context = "System Context Files:\n\n"
+    
+    for filename in files_to_read:
+        if not os.path.exists(filename):
+            print(f"❌ ERROR: Missing context file: {filename}. Please ensure the log file exists.")
+            return None
+
+        with open(filename, 'r') as f:
+            full_context += f"--- START OF FILE: {filename} ---\n"
+            full_context += f.read()
+            full_context += f"\n--- END OF FILE: {filename} ---\n\n"
+            
+    return full_context
+
+# --- 2. The Core Reasoning Prompt ---
+def generate_triage_prompt(context):
+    """Crafts the highly specific prompt for the Gemini 3 agent."""
+    
+    # This prompt tells Gemini 3 its role, the goal, and the expected output format.
+    prompt = f"""
+    You are the **Centralized Debugging Brain**, receiving a structured system state report from a containerized sensor.
+
+    Your task is to analyze the system context and generate a complete, structured fix package that the sensor can automatically execute.
+
+    ### 1. Sensor Report (Input Data)
+
+    System Context:
+    {context}
+    
+    ---
+    
+    ### 2. Diagnosis and Fix Generation
+
+    1. **Root Cause:** State the single, definitive bug found by correlating the code and environment files.
+    2. **Code Patch:** Generate the smallest possible code fix (the corrected line for app.py).
+    3. **Verification:** Explain why this fix satisfies the contract between the two components.
+
+    ### 3. Fix Command Output (The Actionable Response)
+
+    Generate the following structured JSON package. This is the exact command you are sending back to the sensor for immediate execution.
+
+    ```json
+    {{
+      "status": "FIX_GENERATED",
+      "bug_id": "CONN_101",
+      "root_cause": "[Insert your concise diagnosis here]",
+      "patch": {{
+        "file": "app.py",
+        "line_to_change": "BUGGY_REDIS_HOST = 'localhost'",
+        "corrected_line": "BUGGY_REDIS_HOST = '[The correct hostname]'"
+      }},
+      "sensor_command": "APPLY_PATCH_AND_RESTART"
+    }}
+    ```
+    """
+    return prompt
+
+
+# --- 3. Run the Agent ---
+def run_triage_agent():
+    context = load_context_files()
+    if not context:
+        sys.exit(1) # Exit if logs are missing
+
+    agent_prompt = generate_triage_prompt(context)
+    
+    # Initialize the Gemini Client
+    try:
+        # Client automatically picks up the GEMINI_API_KEY environment variable
+        client = genai.Client() 
+    except Exception as e:
+        print("\n--- API KEY ERROR ---")
+        print("Please ensure your GEMINI_API_KEY environment variable is set.")
+        print(f"Error: {e}")
+        sys.exit(1)
+
+    print("🤖 Agent is synthesizing system context and diagnosing crash...")
+    print("-" * 50)
+
+    try:
+        # Use a powerful model for complex reasoning tasks
+        response = client.models.generate_content(
+            model='gemini-2.5-pro', # Pro model for complex, cross-domain reasoning
+            contents=agent_prompt
+        )
+        print(response.text)
+    except APIError as e:
+        print(f"\n--- GEMINI API ERROR ---")
+        print(f"An API error occurred: {e}")
+        print("Check your API key and network connection.")
+    except Exception as e:
+        print(f"\n--- UNKNOWN ERROR ---")
+        print(f"An unexpected error occurred: {e}")
+
+if __name__ == '__main__':
+    run_triage_agent()
+EOF
+
+echo "--- ✅ FILES CREATED! ---"
+echo "Project setup in: **./$PROJECT_DIR**"
+echo "Next steps: Install dependencies, set API Key, and generate the crash_log.txt."

@@ -1,0 +1,12 @@
+services:
+  web:
+    build: .
+    volumes:
+      - .:/app
+    ports:
+      - "5000:5000"
+    environment:
+      - RELAY_HOST=host.docker.internal
+    
+  redis:
+    image: redis:alpine

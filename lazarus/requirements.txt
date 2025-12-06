@@ -1,0 +1,13 @@
+# requirements.txt
+
+# --- Core App and System Components (Web App, Sensor, Healer) ---
+flask          # For the simple web application
+redis          # Library to connect to the Redis service
+requests       # Used by the Sensor and Healer to make HTTP calls to the Relay
+
+# --- Lazarus Relay (FastAPI) Components ---
+fastapi        # The core web framework for the Relay API
+uvicorn        # The ASGI server to run FastAPI efficiently
+
+# --- Agentic Brain (Local Triage Script) ---
+google-genai   # The official Google SDK for interacting with the Gemini 3 API

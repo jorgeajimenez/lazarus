@@ -1,0 +1,15 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "8000:5000"
+    volumes:
+      - .:/code
+    # This service is named 'web' and will try to connect to 'redis'
+
+  redis:
+    image: "redis:alpine"
+    # This service is named 'redis' (which should be the correct hostname)
