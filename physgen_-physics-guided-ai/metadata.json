@@ -1,0 +1,5 @@
+{
+  "name": "PhysGen: Physics-Guided AI",
+  "description": "A sci-fi creative suite combining real-time 3D physics simulations with Generative AI. Simulate rigid bodies and fluids, capture the geometry, and use it as a structural constraint for high-fidelity image generation.",
+  "requestFramePermissions": []
+}
